@@ -1,3 +1,37 @@
+<?php
+// Database connection settings
+$servername = "localhost";
+$dbusername = "e-bikers";
+$dbpassword = "0a9s455r"; // MySQL database password
+$dbname = "e-bikers"; // Your database name
+
+// Create connection
+$conn = new mysqli($servername, $dbusername, $dbpassword, $dbname);
+
+// Check connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Collect form data
+    $username = $_POST['username'];
+    $email = $_POST['email'];
+    $password = $_POST['password'];
+
+    // Insert into database
+    $sql = "INSERT INTO account (username, email, password) VALUES ('$username', '$email', '$password')";
+    
+    if ($conn->query($sql) === TRUE) {
+        echo "New record created successfully";
+        header("Location: login.php");
+    } else {
+        echo "Error: " . $sql . "<br>" . $conn->error;
+    }
+    $conn->close();
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,51 +59,27 @@
             </div>
             <div class="mx-auto register-container">
                 <h2 class="fw-bold text-primary mb-4">Create an Account</h2>
-                <form id="registerForm">
+                <form action="register.php" method="POST">
                     <div class="mb-3 text-start">
                         <label for="username" class="form-label fw-semibold">Full Name</label>
-                        <input type="text" class="form-control" id="username" placeholder="Enter your full name" required>
+                        <input type="text" class="form-control" id="username" name="username" placeholder="Enter your full name" required>
                     </div>
                     <div class="mb-3 text-start">
                         <label for="email" class="form-label fw-semibold">Email Address</label>
-                        <input type="email" class="form-control" id="email" placeholder="Enter your email" required>
+                        <input type="email" class="form-control" id="email" name="email" placeholder="Enter your email" required>
                     </div>
                     <div class="mb-3 text-start">
                         <label for="password" class="form-label fw-semibold">Password</label>
-                        <input type="password" class="form-control" id="password" placeholder="Create a password" required>
+                        <input type="password" class="form-control" id="password" name="password" placeholder="Create a password" required>
                     </div>
                     <button type="submit" class="btn btn-primary w-100 py-2">Register</button>
                 </form>
-                <p class="mt-3 text-muted">Already have an account? <a href="/e-bikers/login.html" class="text-primary">Login</a></p>
+                <p class="mt-3 text-muted">Already have an account? <a href="login.php" class="text-primary">Login</a></p>
                 <p id="registerMessage" class="mt-2"></p>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        document.getElementById('registerForm').addEventListener('submit', async function(event) {
-            event.preventDefault();
-        
-            const username = document.getElementById('username').value;
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-        
-            const response = await fetch('https://67d9928900348dd3e2abb29f.mockapi.io/api/v1/credentials', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password })
-            });
-        
-            const result = await response.json();
-            if (response.ok) {
-                document.getElementById('registerMessage').textContent = "✅ Registration successful! Redirecting...";
-                setTimeout(() => { window.location.href = 'login.html'; }, 1500);
-            } else {
-                document.getElementById('registerMessage').textContent = "❌ Registration failed. Try again.";
-            }
-        });
-        
-    </script>
 </body>
 </html>
