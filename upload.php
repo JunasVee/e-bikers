@@ -1,13 +1,13 @@
 <?php
 session_start();
 
-// Cek login
+// Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-// Koneksi ke database
+// Database connection
 $servername = "localhost";
 $username = "e-bikers";
 $password = "0a9s455r";
@@ -18,7 +18,6 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Validasi dan upload
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_FILES["profile_picture"])) {
     $user_id = $_SESSION['user_id'];
     $upload_dir = "uploads/";
@@ -28,39 +27,42 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_FILES["profile_picture"])) 
     $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
     $valid_types = ["jpg", "jpeg", "png"];
 
-    // Cek apakah file adalah gambar
+    // Check if file is actually an image
     $check = getimagesize($file["tmp_name"]);
     if ($check === false) {
-        echo "File is not an image.";
+        // Not an image
+        header("Location: signedin.php?error=File%20is%20not%20an%20image.");
         exit();
     }
 
-    // Cek ekstensi
+    // Check file extension
     if (!in_array($imageFileType, $valid_types)) {
-        echo "Hanya file JPG, JPEG, dan PNG yang diperbolehkan.";
+        header("Location: signedin.php?error=Only%20JPG,%20JPEG,%20PNG%20allowed.");
         exit();
     }
 
-    // Upload dan simpan path ke database
+    // Move the file
     if (move_uploaded_file($file["tmp_name"], $target_file)) {
-        // Set the profile_picture path relative to the 'uploads' folder
-        $profile_picture = "uploads/" . basename($target_file);
-        
-        // Simpan path gambar ke database
+        // Update profile_picture path in DB
+        $profile_picture = $target_file;
+
         $sql = "UPDATE account SET profile_picture = ? WHERE id = ?";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("si", $profile_picture, $user_id);
-        
+
         if ($stmt->execute()) {
-            header("Location: signedin.php");
+            header("Location: signedin.php?success=Profile%20picture%20updated!");
             exit();
         } else {
-            echo "Gagal menyimpan ke database.";
+            header("Location: signedin.php?error=Failed%20to%20update%20database.");
+            exit();
         }
     } else {
-        echo "Gagal mengunggah file.";
+        header("Location: signedin.php?error=Failed%20to%20upload%20file.");
+        exit();
     }
 } else {
-    echo "Tidak ada file yang diunggah.";
+    header("Location: signedin.php?error=No%20file%20uploaded.");
+    exit();
 }
 ?>

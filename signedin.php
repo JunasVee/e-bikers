@@ -26,18 +26,25 @@ $stmt->execute();
 $stmt->bind_result($username, $email, $profile_picture);
 $stmt->fetch();
 $stmt->close();
-?>
+$conn->close();
 
+// Fallback if no profile picture: show default
+if (empty($profile_picture)) {
+    $profile_picture = "uploads/default.jpg";
+} else {
+    // If not a URL and doesn't start with "uploads/", prepend it (for older DB rows)
+    if (!preg_match('/^https?:\/\//', $profile_picture) && strpos($profile_picture, 'uploads/') !== 0) {
+        $profile_picture = "uploads/" . $profile_picture;
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-Bikers - Rent a Bike</title>
+    <title>E-Bikers - Profile</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script defer src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script defer src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
     <style>
         body { 
             font-family: 'Poppins', sans-serif; 
@@ -80,24 +87,28 @@ $stmt->close();
 <body>
     <div class="container">
         <div class="container-box">
+            <!-- Show error/success alerts -->
+            <?php if (isset($_GET['error'])): ?>
+                <div class="alert alert-danger"><?php echo htmlspecialchars($_GET['error']); ?></div>
+            <?php endif; ?>
+            <?php if (isset($_GET['success'])): ?>
+                <div class="alert alert-success"><?php echo htmlspecialchars($_GET['success']); ?></div>
+            <?php endif; ?>
+
             <div class="text-center mb-4">
                 <!-- Display profile picture -->
-                <?php if ($profile_picture): ?>
-                    <img src="<?php echo htmlspecialchars($profile_picture); ?>" alt="Profile Picture" class="profile-img mb-3">
-                <?php else: ?>
-                    <img src="uploads/default.jpg" alt="Profile Picture" class="profile-img mb-3">
-                <?php endif; ?>
-                
+                <img src="<?php echo htmlspecialchars($profile_picture); ?>" alt="Profile Picture" class="profile-img mb-3">
+
                 <!-- Display username -->
                 <h4 class="fw-bold"><?php echo htmlspecialchars($username); ?></h4>
-                <p class="text-muted"><?php echo htmlspecialchars($email); ?></p>
+                <p class="text-muted mb-0"><?php echo htmlspecialchars($email); ?></p>
             </div>
 
             <!-- Change Profile Picture Form -->
             <form action="upload.php" method="post" enctype="multipart/form-data" class="mb-4">
                 <div class="mb-3">
                     <label for="profile_picture" class="form-label">Change Profile Picture</label>
-                    <input type="file" class="form-control" id="profile_picture" name="profile_picture">
+                    <input type="file" class="form-control" id="profile_picture" name="profile_picture" accept="image/*" required>
                 </div>
                 <button type="submit" class="btn btn-custom w-100">Upload</button>
             </form>

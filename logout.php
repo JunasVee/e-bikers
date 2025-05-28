@@ -1,15 +1,9 @@
 <?php
 session_start();
-
-// Destroy the session
-session_unset();
+$_SESSION = array();
 session_destroy();
-
-// Delete cookies by setting their expiration date to a past time
-setcookie('user_id', '', time() - 3600, "/");
-setcookie('user_email', '', time() - 3600, "/");
-
-// Redirect to login page
+setcookie("user_id", "", time() - 3600, "/");
+setcookie("user_email", "", time() - 3600, "/");
 header("Location: login.php");
 exit();
 ?>
