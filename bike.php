@@ -1,28 +1,19 @@
 <?php
-// Dummy bikes data
-$bikes = [
-    1 => [
-        'name' => 'EcoRide S-1',
-        'img' => 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?fit=crop&w=400&q=80',
-        'desc' => 'Ringan, hemat listrik, cocok untuk perjalanan pendek.',
-        'price' => 15000
-    ],
-    2 => [
-        'name' => 'VoltBike Ultra',
-        'img' => 'https://images.unsplash.com/photo-1465101162946-4377e57745c3?fit=crop&w=400&q=80',
-        'desc' => 'Kecepatan tinggi, daya tahan baterai hingga 50km.',
-        'price' => 20000
-    ],
-    3 => [
-        'name' => 'Green Motion Lite',
-        'img' => 'https://images.unsplash.com/photo-1518655048521-f130df041f66?fit=crop&w=400&q=80',
-        'desc' => 'Desain minimalis, ramah lingkungan, charging cepat.',
-        'price' => 12000
-    ]
-];
+$servername = "localhost";
+$username = "e-bikers";
+$password = "0a9s455r";
+$dbname = "e-bikers";
+$conn = new mysqli($servername, $username, $password, $dbname);
+if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
+
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-$bike = isset($bikes[$id]) ? $bikes[$id] : null;
-if (!$bike) { die("Bike not found."); }
+$sql = "SELECT * FROM bike WHERE id = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $id);
+$stmt->execute();
+$bike = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+if (!$bike) die("Bike not found.");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -38,13 +29,20 @@ if (!$bike) { die("Bike not found."); }
 <body style="background: #f8f9fa;">
     <div class="container py-5">
         <div class="text-center mb-4">
-            <img src="<?= htmlspecialchars($bike['img']) ?>" class="bike-img mb-3" alt="<?= htmlspecialchars($bike['name']) ?>">
+            <img src="<?= htmlspecialchars($bike['image']) ?>" class="bike-img mb-3" alt="<?= htmlspecialchars($bike['name']) ?>">
             <h2 class="fw-bold"><?= htmlspecialchars($bike['name']) ?></h2>
             <p class="lead"><?= htmlspecialchars($bike['desc']) ?></p>
             <div class="fw-bold text-primary mb-3" style="font-size:1.5rem;">
-                Rp<?= number_format($bike['price'],0,',','.') ?>/hour
+                Rp<?= number_format($bike['price'],0,',','.') ?>/jam
             </div>
-            <a href="payment.php?id=<?= $id ?>" class="btn btn-success btn-lg">Order &amp; Pay</a>
+            <?php if ($bike['status'] == 'available'): ?>
+                <form method="POST" action="order.php">
+                    <input type="hidden" name="bike_id" value="<?= $bike['id'] ?>">
+                    <button class="btn btn-success btn-lg" type="submit">Order &amp; Pay</button>
+                </form>
+            <?php else: ?>
+                <div class="alert alert-warning">Sepeda ini sedang tidak tersedia.</div>
+            <?php endif; ?>
         </div>
     </div>
 </body>

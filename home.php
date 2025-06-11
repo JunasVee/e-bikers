@@ -114,7 +114,7 @@ if (isset($_GET['logout'])) {
         <?php else: ?>
           <a href="login.php"><button class="btn btn-outline-light me-3">Login</button></a>
         <?php endif; ?>
-        <a href="/e-bikers/contact.php"><button class="btn btn-light text-primary">Contact</button></a>
+        <a href="contact.php"><button class="btn btn-light text-primary">Contact</button></a>
       </div>
     </div>
   </nav>
@@ -123,7 +123,7 @@ if (isset($_GET['logout'])) {
     <div class="container">
       <h1 class="fw-bold">Ride Green, Ride Smart, Ride E-Bikers</h1>
       <p class="lead">Affordable & secure electric bike rentals near universities in Surabaya.</p>
-      <a href="#" class="btn btn-light btn-lg mt-3">Start Riding</a>
+      <a href="order.php" class="btn btn-light btn-lg mt-3">Start Riding</a>
     </div>
   </section>
 

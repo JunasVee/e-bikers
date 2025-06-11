@@ -1,65 +1,119 @@
 <?php
-// Hardcoded e-bikes for demo (normally from database)
-$bikes = [
-    [
-        'id' => 1,
-        'name' => 'EcoRide S-1',
-        'img' => 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?fit=crop&w=400&q=80',
-        'desc' => 'Ringan, hemat listrik, cocok untuk perjalanan pendek.',
-        'location' => 'ITS Surabaya',
-        'price' => 15000 // per hour
-    ],
-    [
-        'id' => 2,
-        'name' => 'VoltBike Ultra',
-        'img' => 'https://images.unsplash.com/photo-1465101162946-4377e57745c3?fit=crop&w=400&q=80',
-        'desc' => 'Kecepatan tinggi, daya tahan baterai hingga 50km.',
-        'location' => 'Tunjungan Plaza',
-        'price' => 20000
-    ],
-    [
-        'id' => 3,
-        'name' => 'Green Motion Lite',
-        'img' => 'https://images.unsplash.com/photo-1518655048521-f130df041f66?fit=crop&w=400&q=80',
-        'desc' => 'Desain minimalis, ramah lingkungan, charging cepat.',
-        'location' => 'Pakuwon Mall',
-        'price' => 12000
-    ]
-];
-// Pin locations for Surabaya (fake/random)
-$pins = [
-    [-7.265757, 112.734146], // Tunjungan Plaza
-    [-7.290293, 112.727421], // Gubeng Station
-    [-7.257472, 112.752090], // ITS
-    [-7.273551, 112.758980], // Galaxy Mall
-    [-7.245815, 112.737808], // Pakuwon Mall
-];
-// Static "distance away from you" value
-$distance_text = "500 meters away from you";
+session_start();
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+// Koneksi DB
+$servername = "localhost";
+$username = "e-bikers";
+$password = "0a9s455r";
+$dbname = "e-bikers";
+$conn = new mysqli($servername, $username, $password, $dbname);
+if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
+
+// Proses order baru
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['bike_id'])) {
+    $bike_id = intval($_POST['bike_id']);
+    $user_id = $_SESSION['user_id'];
+
+    // Ambil info sepeda untuk validasi harga & ketersediaan
+    $sql_bike = "SELECT price, status FROM bike WHERE id = ?";
+    $stmt_bike = $conn->prepare($sql_bike);
+    $stmt_bike->bind_param("i", $bike_id);
+    $stmt_bike->execute();
+    $result_bike = $stmt_bike->get_result();
+    $bike_data = $result_bike->fetch_assoc();
+    $stmt_bike->close();
+
+    if (!$bike_data) {
+        die("Bike tidak ditemukan.");
+    }
+    if ($bike_data['status'] != 'available') {
+        die("Sepeda sedang tidak tersedia.");
+    }
+
+    $price = $bike_data['price'];
+    $order_code = "ORDER" . rand(100000, 999999);
+    $start_time = date('Y-m-d H:i:s');
+
+    // Insert order ke DB dengan status 'pending' (tidak langsung mulai sewa)
+    $sql = "INSERT INTO `order` (user_id, bike_id, start_time, price, status, order_code) 
+            VALUES (?, ?, ?, ?, 'pending', ?)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("iisis", $user_id, $bike_id, $start_time, $price, $order_code);
+    $stmt->execute();
+    $order_id = $stmt->insert_id;
+    $stmt->close();
+
+    // Redirect ke halaman myorder.php
+    header("Location: myorder.php");
+    exit();
+}
+
+// Ambil semua sepeda yang tersedia dan juga koordinatnya
+$sql = "SELECT * FROM bike WHERE status = 'available'";
+$result = $conn->query($sql);
+
+// Ambil semua sepeda ke array untuk map
+$bikes = [];
+while ($row = $result->fetch_assoc()) {
+    $bikes[] = $row;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>E-Bikers Order</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        #map { height: 300px; border-radius: 12px; }
-        .bike-card img { object-fit: cover; height: 140px; width: 100%; }
-        .bike-card { transition: box-shadow .2s; cursor: pointer; }
-        .bike-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .bike-location { font-size: 0.98em; color: #444; margin-bottom: 4px; }
-        .bike-distance { font-size: 0.93em; color: #888; margin-bottom: 10px; }
+        #map {
+            height: 300px;
+            border-radius: 12px;
+        }
+
+        .bike-card img {
+            object-fit: cover;
+            height: 140px;
+            width: 100%;
+        }
+
+        .bike-card {
+            transition: box-shadow .2s;
+            cursor: pointer;
+        }
+
+        .bike-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .bike-location {
+            font-size: 0.98em;
+            color: #444;
+            margin-bottom: 4px;
+        }
+
+        .bike-distance {
+            font-size: 0.93em;
+            color: #888;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
+
 <body style="background: #f8f9fa;">
     <div class="container py-4">
-        <h2 class="mb-4 text-primary fw-bold">Order E-Bike</h2>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="text-primary fw-bold mb-0">Order E-Bike</h2>
+            <a href="myorder.php" class="btn btn-outline-primary">My Order</a>
+        </div>
         <!-- Map -->
         <div id="map" class="mb-4"></div>
-
         <div class="row mb-4">
             <div class="col-md-6 mb-2">
                 <input type="text" class="form-control" placeholder="Your location (e.g. ITS Surabaya)" id="from">
@@ -70,37 +124,51 @@ $distance_text = "500 meters away from you";
         </div>
         <h4 class="fw-semibold mb-3">Available Electric Bikes</h4>
         <div class="row g-3">
-            <?php foreach ($bikes as $bike): ?>
-            <div class="col-md-4">
-                <div class="card bike-card h-100" onclick="window.location='bike.php?id=<?= $bike['id'] ?>'">
-                    <img src="<?= htmlspecialchars($bike['img']) ?>" alt="<?= htmlspecialchars($bike['name']) ?>">
-                    <div class="card-body">
-                        <div class="bike-location"><b><?= htmlspecialchars($bike['location']) ?></b></div>
-                        <div class="bike-distance"><?= $distance_text ?></div>
-                        <h5 class="card-title"><?= htmlspecialchars($bike['name']) ?></h5>
-                        <p class="card-text"><?= htmlspecialchars($bike['desc']) ?></p>
-                        <div class="fw-bold text-primary mb-2">Rp<?= number_format($bike['price'],0,',','.') ?>/hour</div>
-                        <button class="btn btn-primary w-100" type="button">Order this Bike</button>
+            <?php if (count($bikes) > 0): ?>
+                <?php foreach ($bikes as $bike): ?>
+                    <div class="col-md-4">
+                        <div class="card bike-card h-100">
+                            <img src="<?= htmlspecialchars($bike['image']) ?>" alt="<?= htmlspecialchars($bike['name']) ?>">
+                            <div class="card-body">
+                                <div class="bike-location"><b><?= htmlspecialchars($bike['location']) ?></b></div>
+                                <h5 class="card-title"><?= htmlspecialchars($bike['name']) ?></h5>
+                                <p class="card-text"><?= htmlspecialchars($bike['desc']) ?></p>
+                                <div class="fw-bold text-primary mb-2">Rp<?= number_format($bike['price'], 0, ',', '.') ?>/jam</div>
+                                <form method="POST" action="order.php">
+                                    <input type="hidden" name="bike_id" value="<?= $bike['id'] ?>">
+                                    <button class="btn btn-primary w-100" type="submit">Order this Bike</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="col-12">
+                    <div class="alert alert-info text-center">
+                        Semua sepeda sedang dipinjam. Silakan cek kembali nanti!
                     </div>
                 </div>
-            </div>
-            <?php endforeach; ?>
+            <?php endif; ?>
         </div>
     </div>
-
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
-    // Display Surabaya map
-    var map = L.map('map').setView([-7.265757, 112.734146], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 18
-    }).addTo(map);
+        // Pass PHP bikes array to JS
+        var availableBikes = <?= json_encode($bikes) ?>;
 
-    // Add bike pinpoints
-    <?php foreach($pins as $pin): ?>
-    L.marker([<?= $pin[0] ?>, <?= $pin[1] ?>]).addTo(map)
-        .bindPopup("E-Bike Station");
-    <?php endforeach; ?>
+        var map = L.map('map').setView([-7.265757, 112.734146], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18
+        }).addTo(map);
+
+        // Place markers for each available bike
+        availableBikes.forEach(function(bike) {
+            if (bike.latitude && bike.longitude) {
+                L.marker([bike.latitude, bike.longitude]).addTo(map)
+                    .bindPopup('<b>' + bike.name + '</b><br>' + bike.location);
+            }
+        });
     </script>
 </body>
+
 </html>

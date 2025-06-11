@@ -47,14 +47,11 @@ if (isset($_GET['code'])) {
         $userinfo = json_decode($userinfo_response, true);
 
         if (isset($userinfo['email'])) {
-            // 3. Log in or register the user automatically
+            // 3. Log in ONLY if user exists in database
             $conn = new mysqli($servername, $dbusername, $dbpassword, $dbname);
             if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 
             $email = $userinfo['email'];
-            $username = isset($userinfo['name']) ? $userinfo['name'] : explode('@', $email)[0];
-            $profile_picture = isset($userinfo['picture']) ? $userinfo['picture'] : null;
-            $created_at = date('Y-m-d H:i:s');
 
             // Check if user exists
             $sql = "SELECT id FROM account WHERE email = ?";
@@ -64,30 +61,24 @@ if (isset($_GET['code'])) {
             $stmt->store_result();
 
             if ($stmt->num_rows > 0) {
-                // User exists, log them in
                 $stmt->bind_result($user_id);
                 $stmt->fetch();
+                $stmt->close();
+                $conn->close();
+
+                // Store user ID in session and cookie
+                $_SESSION['user_id'] = $user_id;
+                setcookie('user_id', $user_id, time() + 3600 * 24 * 30, "/");
+                setcookie('user_email', $email, time() + 3600 * 24 * 30, "/");
+
+                // Redirect to main page
+                header("Location: home.php");
+                exit();
             } else {
-                // New user, create an account with ALL info!
-                $sql2 = "INSERT INTO account (username, password, email, profile_picture, created_at) VALUES (?, ?, ?, ?, ?)";
-                $random_pw = bin2hex(random_bytes(8)); // random password
-                $stmt2 = $conn->prepare($sql2);
-                $stmt2->bind_param("sssss", $username, $random_pw, $email, $profile_picture, $created_at);
-                $stmt2->execute();
-                $user_id = $stmt2->insert_id;
-                $stmt2->close();
+                $stmt->close();
+                $conn->close();
+                $error_message = "❌ Your account does not exist in our database. Please <a href='register.php'>register here</a> first.";
             }
-            $stmt->close();
-            $conn->close();
-
-            // Store user ID in session and cookie
-            $_SESSION['user_id'] = $user_id;
-            setcookie('user_id', $user_id, time() + 3600 * 24 * 30, "/");
-            setcookie('user_email', $email, time() + 3600 * 24 * 30, "/");
-
-            // Redirect to main page
-            header("Location: home.php");
-            exit();
         } else {
             $error_message = "❌ Failed to get user info from Google.";
         }
@@ -188,6 +179,11 @@ $google_login_url =
         .btn-primary:hover {
             background-color: #3C94C2;
         }
+
+        .google-btn a {
+            color: inherit;
+            text-decoration: none;
+        }
     </style>
 </head>
 
@@ -210,7 +206,7 @@ $google_login_url =
                     </div>
                     <button type="submit" class="btn btn-primary w-100 py-2">Login</button>
                 </form>
-                <div class="mt-2">
+                <div class="mt-2 google-btn">
                     <a href="<?= $google_login_url ?>"
                         class="btn border shadow-sm d-flex align-items-center justify-content-center py-2"
                         style="background: #fff; border-color: #dadce0; gap: 10px; font-weight: 500; font-size: 16px;">
@@ -221,7 +217,7 @@ $google_login_url =
 
                 <p class="mt-3 text-muted">Don't have an account? <a href="register.php" class="text-primary">Register</a></p>
                 <?php if (isset($error_message)): ?>
-                    <p class="mt-2 text-danger"><?php echo $error_message; ?></p>
+                    <p class="mt-2 text-danger"><?= $error_message ?></p>
                 <?php endif; ?>
             </div>
         </div>

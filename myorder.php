@@ -1,21 +1,45 @@
 <?php
 session_start();
-
-// Load orders from JSON API
-$api_url = 'https://mocki.io/v1/c6fac614-d402-4cf3-8d72-40a7aa539ebd';
-$orders = json_decode(file_get_contents($api_url), true);
-
-// Pisahkan menjadi aktif dan pending
-$active_order = null;
-$pending_order = null;
-foreach ($orders as $order) {
-    if ($order['status'] === 'paid' && !$active_order) {
-        $active_order = $order;
-    }
-    if ($order['status'] === 'pending' && !$pending_order) {
-        $pending_order = $order;
-    }
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
 }
+$servername = "localhost";
+$username = "e-bikers";
+$password = "0a9s455r";
+$dbname = "e-bikers";
+$conn = new mysqli($servername, $username, $password, $dbname);
+if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
+
+// Handle start rental (user clicks "Start Renting")
+if (isset($_POST['start_order_id'])) {
+    $start_order_id = intval($_POST['start_order_id']);
+    $stmt = $conn->prepare("UPDATE `order` SET status = 'active', start_time = NOW() WHERE id = ? AND user_id = ?");
+    $stmt->bind_param("ii", $start_order_id, $_SESSION['user_id']);
+    $stmt->execute();
+    $stmt->close();
+    // Set bike to rented
+    $stmt2 = $conn->prepare("UPDATE bike SET status = 'rented' WHERE id = (SELECT bike_id FROM `order` WHERE id = ?)");
+    $stmt2->bind_param("i", $start_order_id);
+    $stmt2->execute();
+    $stmt2->close();
+    header("Location: myorder.php");
+    exit();
+}
+
+// Fetch latest active/pending order for user
+$sql = "SELECT o.*, b.name AS bike_name, b.image AS bike_image, b.id AS bike_id 
+        FROM `order` o
+        JOIN bike b ON o.bike_id = b.id
+        WHERE o.user_id = ? AND o.status IN ('pending','active','pending_payment','paid')
+        ORDER BY o.created_at DESC LIMIT 1";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$order = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$order) die("Belum ada pesanan aktif.");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -24,84 +48,104 @@ foreach ($orders as $order) {
     <title>My Order | E-Bikers</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .order-card { border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.07);}
-        .bike-img { width: 68px; height: 68px; object-fit:cover; border-radius:7px; margin-right:18px;}
-        .qr-img {width: 130px; display: block; margin: 0 auto;}
+        .invoice-box {
+            max-width: 420px;
+            margin: 50px auto;
+            background: #fff;
+            padding: 32px 26px;
+            border-radius: 14px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.11);
+        }
+        .invoice-img {
+            width: 120px;
+            border-radius: 9px;
+        }
+        .qr-modal-img {
+            width: 220px; 
+            display:block; 
+            margin:auto;
+        }
     </style>
 </head>
 <body style="background:#f8f9fa">
     <div class="container py-4">
-        <h3 class="fw-bold mb-4 text-primary">My Order</h3>
-        <!-- Active Orders -->
-        <h5 class="mb-2">Active Order</h5>
-        <?php if($active_order): ?>
-        <div class="order-card bg-white p-3 mb-3 d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center">
-                <img src="<?= htmlspecialchars($active_order['img']) ?>" class="bike-img" alt="">
-                <div>
-                    <div class="fw-semibold"><?= htmlspecialchars($active_order['name']) ?></div>
-                    <div class="text-muted mb-1">Order Code: <?= htmlspecialchars($active_order['order_code']) ?></div>
-                    <div class="text-success fw-bold">Paid</div>
-                </div>
-            </div>
-            <button class="btn btn-outline-dark" onclick="showQR('<?= htmlspecialchars($active_order['order_code']) ?>', '<?= htmlspecialchars($active_order['id']) ?>')">Tampilkan QR</button>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0 fw-bold">Order Aktif E-Bikers</h4>
+            <a href="order_history.php" class="btn btn-outline-secondary">Order History</a>
         </div>
-        <?php else: ?>
-            <div class="alert alert-info">Belum ada order aktif.</div>
-        <?php endif; ?>
-
-        <!-- Pending Orders -->
-        <h5 class="mt-4 mb-2">Pending Order</h5>
-        <?php if($pending_order): ?>
-        <div class="order-card bg-white p-3 mb-3 d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center">
-                <img src="<?= htmlspecialchars($pending_order['img']) ?>" class="bike-img" alt="">
+        <div class="invoice-box">
+            <img src="<?= htmlspecialchars($order['bike_image']) ?>" class="invoice-img mb-3" alt="">
+            <div><b>Bike:</b> <?= htmlspecialchars($order['bike_name']) ?></div>
+            <div><b>Status:</b> <?= htmlspecialchars($order['status']) ?></div>
+            <?php if ($order['status'] == 'pending'): ?>
+                <form method="POST" class="mt-3">
+                    <input type="hidden" name="start_order_id" value="<?= $order['id'] ?>">
+                    <button class="btn btn-success w-100 py-2" type="submit">Start Renting</button>
+                </form>
+                <div class="text-center mt-3"><a href="order.php">Kembali</a></div>
+            <?php elseif ($order['status'] == 'active'): ?>
                 <div>
-                    <div class="fw-semibold"><?= htmlspecialchars($pending_order['name']) ?></div>
-                    <div class="text-muted mb-1">Order Code: <?= htmlspecialchars($pending_order['order_code']) ?></div>
-                    <div class="text-warning fw-bold">Pending Payment</div>
+                    <b>Waktu Sewa:</b> <span id="timer">00:00:00</span>
                 </div>
-            </div>
-            <a href="payment.php?id=<?= $pending_order['id'] ?>" class="btn btn-success">Bayar Sekarang</a>
+                <div class="mb-2"><b>Harga sementara:</b> Rp<span id="dynamicPrice"><?= number_format($order['price'],0,',','.') ?></span></div>
+                <div class="fw-bold text-info mb-3">Sedang dalam penggunaan.</div>
+                <!-- Redirect to payment page with order id -->
+                <a href="payment.php?order_id=<?= $order['id'] ?>" class="btn btn-success w-100 py-2 mt-3">Done</a>
+                <button class="btn btn-outline-secondary w-100 py-2 mt-2" data-bs-toggle="modal" data-bs-target="#qrModal">Show QR Code</button>
+            <?php elseif ($order['status'] == 'pending_payment'): ?>
+                <div class="mb-2"><b>Total Harga:</b> Rp<?= number_format($order['price'], 0, ',', '.') ?></div>
+                <div class="alert alert-warning mb-3">Silakan bayar untuk menyelesaikan sewa.</div>
+                <a href="payment.php?order_id=<?= $order['id'] ?>" class="btn btn-primary w-100 py-2">Bayar Sekarang</a>
+            <?php elseif ($order['status'] == 'paid'): ?>
+                <div class="mb-2"><b>Total Harga:</b> Rp<?= number_format($order['price'], 0, ',', '.') ?></div>
+                <div class="alert alert-success text-center">Order sudah dibayar! Terima kasih.</div>
+                <div class="text-center mt-3"><a href="order.php">Pesan Lagi</a></div>
+            <?php endif; ?>
+            <?php if ($order['status'] != 'pending'): ?>
+            <div class="text-center mt-3"><a href="order.php">Pesan Lagi</a></div>
+            <?php endif; ?>
         </div>
-        <?php else: ?>
-            <div class="alert alert-info">Tidak ada order pending.</div>
-        <?php endif; ?>
     </div>
-
-    <!-- Modal QR -->
-    <div class="modal" tabindex="-1" id="qrModal">
+    <!-- QR Modal -->
+    <div class="modal fade" id="qrModal" tabindex="-1" aria-labelledby="qrModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content text-center">
+        <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">QR Kunci Sepeda</h5>
-            <button type="button" class="btn-close" onclick="closeQR()" aria-label="Close"></button>
+            <h5 class="modal-title" id="qrModalLabel">Scan QR Code to Unlock</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body">
-            <div id="qrArea"></div>
-            <div class="text-muted mt-2">Scan QR ini untuk membuka kunci sepeda E-Bikers.</div>
+          <div class="modal-body text-center">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=<?= urlencode('EBIKE-' . $order['bike_id']) ?>" alt="QR Code" class="qr-modal-img mb-2" />
+            <div class="mt-2">Kode Sepeda: <b><?= htmlspecialchars($order['bike_id']) ?></b></div>
           </div>
         </div>
       </div>
     </div>
+    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <?php if ($order['status'] == 'active'): ?>
     <script>
-        function showQR(orderCode, bikeId) {
-            var qrValue = "E-Bikers|" + orderCode + "|BIKE" + bikeId;
-            var modal = new bootstrap.Modal(document.getElementById('qrModal'));
-            var qr = new QRious({
-                value: qrValue,
-                size: 160
-            });
-            document.getElementById('qrArea').innerHTML = '';
-            document.getElementById('qrArea').appendChild(qr.image);
-            modal.show();
+        let startTimestamp = <?= strtotime($order['start_time']) ?>;
+        let pricePerHour = <?= intval($order['price']) ?>;
+        function updateTimer() {
+            let now = Math.floor(Date.now() / 1000);
+            let elapsed = now - startTimestamp;
+            if (elapsed < 0) elapsed = 0;
+            let h = Math.floor(elapsed / 3600);
+            let m = Math.floor((elapsed % 3600) / 60);
+            let s = elapsed % 60;
+            let hoursBilled = Math.ceil(elapsed / 3600);
+            if (hoursBilled < 1) hoursBilled = 1;
+            document.getElementById('timer').textContent =
+                String(h).padStart(2, '0') + ':' +
+                String(m).padStart(2, '0') + ':' +
+                String(s).padStart(2, '0');
+            document.getElementById('dynamicPrice').textContent =
+                (pricePerHour * hoursBilled).toLocaleString('id-ID');
         }
-        function closeQR() {
-            var modal = bootstrap.Modal.getInstance(document.getElementById('qrModal'));
-            modal.hide();
-        }
+        updateTimer();
+        setInterval(updateTimer, 1000);
     </script>
+    <?php endif; ?>
 </body>
 </html>
